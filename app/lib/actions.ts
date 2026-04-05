@@ -8,21 +8,21 @@ import postgres from 'postgres';
 import { z } from 'zod';
 
 const FormSchema = z.object({
-    id: z.string(),
-    customerId: z.string({
-      invalid_type_error: "Please select a customer."
-    }),
-    amount: z.coerce
+  id: z.string(),
+  customerId: z.string({
+    invalid_type_error: "Please select a customer."
+  }),
+  amount: z.coerce
     .number()
-    .gte(0, { message: 'Please enter an amount greater than or equal to $0.'}),
-    status: z.enum(['pending', 'paid'], {
-      invalid_type_error: 'Please select an invoice status.'
-    }), 
-    date: z.string(),
+    .gte(0, { message: 'Please enter an amount greater than or equal to $0.' }),
+  status: z.enum(['pending', 'paid'], {
+    invalid_type_error: 'Please select an invoice status.'
+  }),
+  date: z.string(),
 })
 const CreateInovice = FormSchema.omit({ id: true, date: true })
 const UpdateInvoice = FormSchema.omit({ id: true, date: true });
-const sql = postgres(process.env.POSTGRES_URL!, {ssl: 'require'});
+const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
 export type State = {
   errors?: {
@@ -33,34 +33,36 @@ export type State = {
   message?: string | null;
 };
 
-export async function createInvoice(preveState: State, formData: FormData) {
-    const validatedFields = CreateInovice.safeParse({
-        customerId: formData.get('customerId'),
-        amount: formData.get('amount'),
-        status: formData.get('status'),
-    });
-    if (!validatedFields.success) {
-      return {
-        errors: validatedFields.error.flatten().fieldErrors,
-        message: 'Missing fields. Failed to create invoice.',
-      };
-    }
-    const { customerId, amount, status } = validatedFields.data;
-    const amountInCents = amount * 100;
-    const date = new Date().toISOString().split('T')[0];
-    try {
+export async function createInvoice(prevState: State, formData: FormData): Promise<State> {
+  const validatedFields = CreateInovice.safeParse({
+    customerId: formData.get('customerId'),
+    amount: formData.get('amount'),
+    status: formData.get('status'),
+  });
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing fields. Failed to create invoice.',
+    };
+  }
+  const { customerId, amount, status } = validatedFields.data;
+  const amountInCents = amount * 100;
+  const date = new Date().toISOString().split('T')[0];
+  try {
     await sql`
     INSERT INTO invoices (customer_id, amount, status, date)
     VALUES (${customerId}, ${amountInCents}, ${status}, ${date})`;
-    } catch (error) {
-      console.error(error);
-      return {
-        message: "Database error: Failed to create invoice",
-      };
-    }
+  } catch (error) {
+    console.error(error);
+    return {
+      message: "Database error: Failed to create invoice",
+    };
+  }
 
-    revalidatePath('/dashboard/invoices');
-    redirect('/dashboard/invoices');
+  revalidatePath('/dashboard/invoices');
+  redirect('/dashboard/invoices');
+
+  return { message: null, errors: {} };
 }
 
 export async function updateInvoice(id: string, prevState: State, formData: FormData) {
@@ -77,13 +79,13 @@ export async function updateInvoice(id: string, prevState: State, formData: Form
   }
   const { customerId, amount, status } = validatedFields.data;
   const amountInCents = amount * 100;
- 
+
   await sql`
     UPDATE invoices
     SET customer_id = ${customerId}, amount = ${amountInCents}, status = ${status}
     WHERE id = ${id}
   `;
- 
+
   revalidatePath('/dashboard/invoices');
   redirect('/dashboard/invoices');
 }
